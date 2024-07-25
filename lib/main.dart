@@ -22,23 +22,26 @@ class SensorPage extends StatefulWidget {
 }
 
 class _SensorPageState extends State<SensorPage> {
-  dynamic temperature = 0.0;
-  dynamic humidity = 0.0;
+  dynamic temperature = '0.0';
+  dynamic humidity = '0.0';
   Timer? timer;
   bool isRunning = false;
-  String apiUrl = '';
-  final TextEditingController _controller = TextEditingController();
+  String postUrl = '';
+  String getUrl = '';
+  final TextEditingController _postController = TextEditingController();
+  final TextEditingController _getController = TextEditingController();
 
   void startDataFetch() {
-    if (apiUrl.isEmpty) {
+    if (postUrl.isEmpty || getUrl.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please enter an API URL')),
+        SnackBar(content: Text('Please enter both POST and GET URLs')),
       );
       return;
     }
     setState(() {
       isRunning = true;
     });
+    postData('start');
     timer = Timer.periodic(Duration(seconds: 5), (Timer t) => fetchData());
   }
 
@@ -46,17 +49,18 @@ class _SensorPageState extends State<SensorPage> {
     setState(() {
       isRunning = false;
     });
+    postData('stop');
     timer?.cancel();
   }
 
   Future<void> fetchData() async {
     try {
-      final response = await http.get(Uri.parse(apiUrl));
+      final response = await http.get(Uri.parse(getUrl));
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         setState(() {
-          temperature = data['temperature'];
-          humidity = data['humidity'];
+          temperature = data['data']['_temperature'].toString();
+          humidity = data['data']['_humidity'].toString();
         });
       } else {
         throw Exception('Failed to load data');
@@ -70,72 +74,110 @@ class _SensorPageState extends State<SensorPage> {
     }
   }
 
+  Future<void> postData(String status) async {
+    try {
+      final response = await http.post(
+        Uri.parse(postUrl),
+        headers: <String, String>{
+          'Content-Type': 'application/json; charset=UTF-8',
+        },
+        body: jsonEncode(<String, String>{
+          '_status': status,
+        }),
+      );
+      if (response.statusCode == 200) {
+        print('Data posted successfully');
+      } else {
+        throw Exception('Failed to post data');
+      }
+    } catch (e) {
+      print('Error posting data: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text('Sensor Data')),
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Padding(
-              padding: EdgeInsets.all(16.0),
-              child: TextField(
-                controller: _controller,
-                decoration: InputDecoration(
-                  labelText: 'Enter API URL',
-                  border: OutlineInputBorder(),
+      body: SingleChildScrollView(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Padding(
+                padding: EdgeInsets.all(16.0),
+                child: TextField(
+                  controller: _postController,
+                  decoration: InputDecoration(
+                    labelText: 'Enter POST URL',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      postUrl = value;
+                    });
+                  },
                 ),
-                onChanged: (value) {
-                  setState(() {
-                    apiUrl = value;
-                  });
-                },
               ),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Column(
-                      children: [
-                        Text('Temperature'),
-                        Text('${temperature.toStringAsFixed(1)}°C'),
-                      ],
+              Padding(
+                padding: EdgeInsets.all(16.0),
+                child: TextField(
+                  controller: _getController,
+                  decoration: InputDecoration(
+                    labelText: 'Enter GET URL',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (value) {
+                    setState(() {
+                      getUrl = value;
+                    });
+                  },
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Column(
+                        children: [
+                          Text('Temperature'),
+                          Text('$temperature°C'),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(16.0),
-                    child: Column(
-                      children: [
-                        Text('Humidity'),
-                        Text('${humidity.toStringAsFixed(1)}%'),
-                      ],
+                  Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Column(
+                        children: [
+                          Text('Humidity'),
+                          Text('$humidity%'),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-            SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                ElevatedButton(
-                  onPressed: isRunning ? null : startDataFetch,
-                  child: Text('Start'),
-                ),
-                SizedBox(width: 20),
-                ElevatedButton(
-                  onPressed: isRunning ? stopDataFetch : null,
-                  child: Text('Stop'),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+              SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  ElevatedButton(
+                    onPressed: isRunning ? null : startDataFetch,
+                    child: Text('Start'),
+                  ),
+                  SizedBox(width: 20),
+                  ElevatedButton(
+                    onPressed: isRunning ? stopDataFetch : null,
+                    child: Text('Stop'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -143,7 +185,8 @@ class _SensorPageState extends State<SensorPage> {
 
   @override
   void dispose() {
-    _controller.dispose();
+    _postController.dispose();
+    _getController.dispose();
     timer?.cancel();
     super.dispose();
   }
